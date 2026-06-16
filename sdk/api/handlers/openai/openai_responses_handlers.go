@@ -350,7 +350,11 @@ func (h *OpenAIResponsesAPIHandler) HandlerType() string {
 func (h *OpenAIResponsesAPIHandler) Models() []map[string]any {
 	// Get dynamic models from the global registry
 	modelRegistry := registry.GetGlobalRegistry()
-	return modelRegistry.GetAvailableModels("openai")
+	models := modelRegistry.GetAvailableModels("openai")
+	if fusionModel := h.BaseAPIHandler.FusionModelForListing(); fusionModel != nil {
+		models = append(models, fusionModel)
+	}
+	return models
 }
 
 // OpenAIResponsesModels handles the /v1/models endpoint.

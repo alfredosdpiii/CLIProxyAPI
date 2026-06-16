@@ -106,6 +106,20 @@ force-model-prefix: false
 # Default is false (disabled).
 passthrough-headers: false
 
+# Local multi-model fusion router. When enabled, exposes a virtual model that
+# fans out to panel models and synthesizes with a judge model.
+# fusion:
+#   enabled: true
+#   model: BryanFusion
+#   panel:
+#     - gpt-5.5(xhigh)
+#     - glm-5.2(max)
+#     - kimi-k2.7
+#     - deepseek-v4-pro(max)
+#   judge: gpt-5.5(xhigh)
+#   min-successes: 3
+#   simulated-streaming: true
+
 # Number of times to retry a request. Retries will occur if the HTTP response code is 403, 408, 500, 502, 503, or 504.
 request-retry: 3
 
