@@ -708,6 +708,11 @@ func (h *BaseAPIHandler) executeWithAuthManager(ctx context.Context, handlerType
 
 func (h *BaseAPIHandler) executeWithAuthManagerFormats(ctx context.Context, entryProtocol, exitProtocol, modelName string, rawJSON []byte, alt string, allowImageModel bool, execOptions modelExecutionOptions) ([]byte, http.Header, *interfaces.ErrorMessage) {
 	originalRequestedModel := modelName
+	if !allowImageModel {
+		if fusionCfg, ok := h.fusionRequestConfig(modelName); ok {
+			return h.executeFusionNonStream(ctx, entryProtocol, modelName, rawJSON, alt, fusionCfg)
+		}
+	}
 	routeDecision := h.applyModelRouter(ctx, entryProtocol, modelName, rawJSON, false, execOptions)
 	responseProtocol := modelExecutionResponseProtocol(entryProtocol, exitProtocol)
 	if routeDecision.ExecutorPluginID != "" {
@@ -1095,6 +1100,11 @@ func (h *BaseAPIHandler) executeStreamWithAuthManager(ctx context.Context, handl
 
 func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context, entryProtocol, exitProtocol, modelName string, rawJSON []byte, alt string, allowImageModel bool, execOptions modelExecutionOptions) (<-chan []byte, http.Header, <-chan *interfaces.ErrorMessage) {
 	originalRequestedModel := modelName
+	if !allowImageModel {
+		if fusionCfg, ok := h.fusionRequestConfig(modelName); ok {
+			return h.executeFusionStream(ctx, entryProtocol, modelName, rawJSON, alt, fusionCfg)
+		}
+	}
 	routeDecision := h.applyModelRouter(ctx, entryProtocol, modelName, rawJSON, true, execOptions)
 	responseProtocol := modelExecutionResponseProtocol(entryProtocol, exitProtocol)
 	if routeDecision.ExecutorPluginID != "" {

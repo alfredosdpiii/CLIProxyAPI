@@ -52,12 +52,31 @@ type SDKConfig struct {
 	// Default is false (disabled).
 	PassthroughHeaders bool `yaml:"passthrough-headers" json:"passthrough-headers"`
 
+	// Fusion configures a local multi-model fusion router exposed as a virtual model.
+	Fusion FusionConfig `yaml:"fusion" json:"fusion"`
+
 	// Streaming configures server-side streaming behavior (keep-alives and safe bootstrap retries).
 	Streaming StreamingConfig `yaml:"streaming" json:"streaming"`
 
 	// NonStreamKeepAliveInterval controls how often blank lines are emitted for non-streaming responses.
 	// <= 0 disables keep-alives. Value is in seconds.
 	NonStreamKeepAliveInterval int `yaml:"nonstream-keepalive-interval,omitempty" json:"nonstream-keepalive-interval,omitempty"`
+}
+
+// FusionConfig defines a local fan-out and judge synthesis model route.
+type FusionConfig struct {
+	// Enabled exposes the virtual fusion model when true.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Model is the client-visible virtual model name. Defaults to "BryanFusion" when enabled and empty.
+	Model string `yaml:"model" json:"model"`
+	// Panel lists model aliases called independently in parallel.
+	Panel []string `yaml:"panel" json:"panel"`
+	// Judge is the model alias that synthesizes panel responses.
+	Judge string `yaml:"judge" json:"judge"`
+	// MinSuccesses is the minimum successful panel calls required before judging.
+	MinSuccesses int `yaml:"min-successes" json:"min-successes"`
+	// SimulatedStreaming streams the final judge response after non-streaming panel calls complete.
+	SimulatedStreaming bool `yaml:"simulated-streaming" json:"simulated-streaming"`
 }
 
 // StreamingConfig holds server streaming behavior configuration.
