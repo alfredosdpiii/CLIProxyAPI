@@ -8,6 +8,42 @@ It now also supports OpenAI Codex (GPT models), Claude Code via OAuth, and the B
 
 So you can use local or multi-account CLI access with OpenAI(include Responses)/Gemini/Claude-compatible clients and SDKs.
 
+## BryanFusion Router
+
+BryanFusion exposes a configurable virtual model that fans a request out to several underlying models, gathers independent candidate answers, and asks a judge model to synthesize the final response. It is designed for cases where independent model diversity can improve answer quality, while still presenting a normal OpenAI-compatible model name to clients.
+
+Main features:
+
+- Configurable virtual model name, panel models, judge model, minimum success threshold, and simulated streaming.
+- Parallel non-streaming panel calls, followed by a judge pass once enough successful candidate responses are available.
+- Recursion guard so the virtual BryanFusion model cannot accidentally route back into itself.
+- Request-shape preservation for OpenAI Chat Completions and Responses clients.
+- Tool fields are stripped from panel and judge calls so hidden orchestration is not exposed to the candidate models.
+
+Example configuration:
+
+```yaml
+fusion:
+  enabled: true
+  model: BryanFusion
+  panel:
+    - gpt-5.5(xhigh)
+    - glm-5.2(max)
+    - kimi-k2.7
+    - deepseek-v4-pro(max)
+  judge: gpt-5.5(xhigh)
+  min-successes: 3
+  simulated-streaming: true
+```
+
+The design is informed by research on sampling diverse reasoning paths, multi-agent debate, and model ensembling:
+
+- Wang et al., "Self-Consistency Improves Chain of Thought Reasoning in Language Models" ([arXiv:2203.11171](https://arxiv.org/abs/2203.11171)).
+- Du et al., "Improving Factuality and Reasoning in Language Models through Multiagent Debate" ([arXiv:2305.14325](https://arxiv.org/abs/2305.14325)).
+- Jiang et al., "LLM-Blender: Ensembling Large Language Models with Pairwise Ranking and Generative Fusion" ([arXiv:2306.02561](https://arxiv.org/abs/2306.02561)).
+- Chen et al., "FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance" ([arXiv:2305.05176](https://arxiv.org/abs/2305.05176)).
+- Ong et al., "RouteLLM: Learning to Route LLMs with Preference Data" ([arXiv:2406.18665](https://arxiv.org/abs/2406.18665)).
+
 ## Sponsor
 
 [![https://www.packyapi.com/register?aff=cliproxyapi](./assets/packycode-en.png)](https://www.packyapi.com/register?aff=cliproxyapi)
@@ -73,42 +109,6 @@ PackyCode provides special discounts for our software users: register using <a h
 - Grok Build multi-account load balancing
 - OpenAI-compatible upstream providers via config (e.g., OpenRouter)
 - Reusable Go SDK for embedding the proxy (see `docs/sdk-usage.md`)
-
-## BryanFusion Router
-
-BryanFusion exposes a configurable virtual model that fans a request out to several underlying models, gathers independent candidate answers, and asks a judge model to synthesize the final response. It is designed for cases where independent model diversity can improve answer quality, while still presenting a normal OpenAI-compatible model name to clients.
-
-Main features:
-
-- Configurable virtual model name, panel models, judge model, minimum success threshold, and simulated streaming.
-- Parallel non-streaming panel calls, followed by a judge pass once enough successful candidate responses are available.
-- Recursion guard so the virtual BryanFusion model cannot accidentally route back into itself.
-- Request-shape preservation for OpenAI Chat Completions and Responses clients.
-- Tool fields are stripped from panel and judge calls so hidden orchestration is not exposed to the candidate models.
-
-Example configuration:
-
-```yaml
-fusion:
-  enabled: true
-  model: BryanFusion
-  panel:
-    - gpt-5.5(xhigh)
-    - glm-5.2(max)
-    - kimi-k2.7
-    - deepseek-v4-pro(max)
-  judge: gpt-5.5(xhigh)
-  min-successes: 3
-  simulated-streaming: true
-```
-
-The design is informed by research on sampling diverse reasoning paths, multi-agent debate, and model ensembling:
-
-- Wang et al., "Self-Consistency Improves Chain of Thought Reasoning in Language Models" ([arXiv:2203.11171](https://arxiv.org/abs/2203.11171)).
-- Du et al., "Improving Factuality and Reasoning in Language Models through Multiagent Debate" ([arXiv:2305.14325](https://arxiv.org/abs/2305.14325)).
-- Jiang et al., "LLM-Blender: Ensembling Large Language Models with Pairwise Ranking and Generative Fusion" ([arXiv:2306.02561](https://arxiv.org/abs/2306.02561)).
-- Chen et al., "FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance" ([arXiv:2305.05176](https://arxiv.org/abs/2305.05176)).
-- Ong et al., "RouteLLM: Learning to Route LLMs with Preference Data" ([arXiv:2406.18665](https://arxiv.org/abs/2406.18665)).
 
 ## Getting Started
 
