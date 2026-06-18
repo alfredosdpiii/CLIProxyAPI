@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
+	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/thinking"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/util"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
+	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -191,17 +193,23 @@ func (h *BaseAPIHandler) executeFusionNonStream(ctx context.Context, handlerType
 	if err := h.fusionConfigError(cfg); err != nil {
 		return nil, nil, fusionBadRequest(err)
 	}
+	fusionLog(ctx).Infof("fusion: panel fanout start model=%s panel_size=%d min_successes=%d", cfg.Model, len(cfg.Panel), cfg.MinSuccesses)
 	results := h.runFusionPanel(ctx, handlerType, rawJSON, alt, cfg)
 	successes := successfulFusionPanelResults(results)
+	fusionLog(ctx).Infof("fusion: panel fanout complete model=%s successes=%d failures=%d min_successes=%d", cfg.Model, len(successes), len(results)-len(successes), cfg.MinSuccesses)
 	if len(successes) < cfg.MinSuccesses {
 		return nil, nil, fusionBadRequest(fmt.Errorf("fusion panel produced %d successful responses, need %d", len(successes), cfg.MinSuccesses))
 	}
 
 	judgePayload := buildFusionJudgePayload(handlerType, cfg.Judge, modelName, rawJSON, successes, false)
+	judgeStarted := time.Now()
+	fusionLog(ctx).Infof("fusion: judge start model=%s candidates=%d", cfg.Judge, len(successes))
 	resp, headers, errMsg := h.executeFusionTargetNonStream(ctx, handlerType, cfg.Judge, judgePayload, alt)
 	if errMsg != nil {
+		fusionLog(ctx).Warnf("fusion: judge failed model=%s duration=%s error=%v", cfg.Judge, fusionDuration(judgeStarted), errMsg.Error)
 		return nil, nil, errMsg
 	}
+	fusionLog(ctx).Infof("fusion: judge response model=%s duration=%s chars=%d", cfg.Judge, fusionDuration(judgeStarted), len(extractFusionAssistantText(resp)))
 	return setFusionResponseModel(handlerType, resp, cfg.Model), headers, nil
 }
 
@@ -217,8 +225,10 @@ func (h *BaseAPIHandler) executeFusionStream(ctx context.Context, handlerType, m
 		close(errChan)
 		return nil, nil, errChan
 	}
+	fusionLog(ctx).Infof("fusion: panel fanout start model=%s panel_size=%d min_successes=%d", cfg.Model, len(cfg.Panel), cfg.MinSuccesses)
 	results := h.runFusionPanel(ctx, handlerType, rawJSON, alt, cfg)
 	successes := successfulFusionPanelResults(results)
+	fusionLog(ctx).Infof("fusion: panel fanout complete model=%s successes=%d failures=%d min_successes=%d", cfg.Model, len(successes), len(results)-len(successes), cfg.MinSuccesses)
 	if len(successes) < cfg.MinSuccesses {
 		errChan <- fusionBadRequest(fmt.Errorf("fusion panel produced %d successful responses, need %d", len(successes), cfg.MinSuccesses))
 		close(errChan)
@@ -226,12 +236,16 @@ func (h *BaseAPIHandler) executeFusionStream(ctx context.Context, handlerType, m
 	}
 
 	judgePayload := buildFusionJudgePayload(handlerType, cfg.Judge, modelName, rawJSON, successes, true)
+	judgeStarted := time.Now()
+	fusionLog(ctx).Infof("fusion: judge stream start model=%s candidates=%d", cfg.Judge, len(successes))
 	result, errMsg := h.executeFusionTargetStream(ctx, handlerType, cfg.Judge, judgePayload, alt)
 	if errMsg != nil {
+		fusionLog(ctx).Warnf("fusion: judge stream failed model=%s duration=%s error=%v", cfg.Judge, fusionDuration(judgeStarted), errMsg.Error)
 		errChan <- errMsg
 		close(errChan)
 		return nil, nil, errChan
 	}
+	fusionLog(ctx).Infof("fusion: judge stream response started model=%s duration=%s", cfg.Judge, fusionDuration(judgeStarted))
 	headers := http.Header(nil)
 	if PassthroughHeadersEnabled(h.Cfg) {
 		headers = FilterUpstreamHeaders(result.Headers)
@@ -248,23 +262,40 @@ func (h *BaseAPIHandler) runFusionPanel(ctx context.Context, handlerType string,
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			started := time.Now()
+			results[i].Index = i
+			fusionLog(ctx).Infof("fusion: panel start index=%d model=%s", i, model)
 			payload := buildFusionPanelPayload(handlerType, model, rawJSON)
 			resp, _, errMsg := h.executeFusionTargetNonStream(ctx, handlerType, model, payload, alt)
-			results[i].Index = i
 			if errMsg != nil {
 				results[i].Err = errMsg.Error
+				fusionLog(ctx).Warnf("fusion: panel failed index=%d model=%s duration=%s error=%v", i, model, fusionDuration(started), errMsg.Error)
 				return
 			}
 			text := extractFusionAssistantText(resp)
 			if strings.TrimSpace(text) == "" {
 				results[i].Err = fmt.Errorf("empty panel response")
+				fusionLog(ctx).Warnf("fusion: panel empty response index=%d model=%s duration=%s", i, model, fusionDuration(started))
 				return
 			}
 			results[i].Text = text
+			fusionLog(ctx).Infof("fusion: panel response index=%d model=%s duration=%s chars=%d", i, model, fusionDuration(started), len(text))
 		}()
 	}
 	wg.Wait()
 	return results
+}
+
+func fusionLog(ctx context.Context) *log.Entry {
+	requestID := internallogging.GetRequestID(ctx)
+	if requestID == "" {
+		return log.NewEntry(log.StandardLogger())
+	}
+	return log.WithField("request_id", requestID)
+}
+
+func fusionDuration(started time.Time) time.Duration {
+	return time.Since(started).Round(time.Millisecond)
 }
 
 func successfulFusionPanelResults(results []fusionPanelResult) []fusionPanelResult {
