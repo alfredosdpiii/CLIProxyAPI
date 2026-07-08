@@ -150,6 +150,53 @@ func TestFileRequestLogger_HomeEnabled_ForwardsWhenRequestLogEnabled(t *testing.
 	}
 }
 
+func TestFileRequestLogger_HomeEnabledFallsBackToLocalWhenCollectorUnavailable(t *testing.T) {
+	original := currentHomeRequestLogClient
+	defer func() {
+		currentHomeRequestLogClient = original
+	}()
+
+	currentHomeRequestLogClient = func() homeRequestLogClient {
+		return nil
+	}
+
+	logsDir := t.TempDir()
+	logger := NewFileRequestLogger(true, logsDir, "", 0)
+	logger.SetHomeEnabled(true)
+
+	errLog := logger.LogRequest(
+		"/v1/responses",
+		http.MethodPost,
+		map[string][]string{"Content-Type": {"application/json"}},
+		[]byte(`{"input":"hello"}`),
+		http.StatusOK,
+		map[string][]string{"Content-Type": {"application/json"}},
+		[]byte(`{"ok":true}`),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		"req-fallback",
+		time.Now(),
+		time.Now(),
+	)
+	if errLog != nil {
+		t.Fatalf("LogRequest error: %v", errLog)
+	}
+
+	entries, errRead := os.ReadDir(logsDir)
+	if errRead != nil {
+		t.Fatalf("failed to read logs dir: %v", errRead)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("local log entries = %d, want 1: %+v", len(entries), entries)
+	}
+	if !strings.Contains(entries[0].Name(), "req-fallback") {
+		t.Fatalf("local log name = %q, want request id", entries[0].Name())
+	}
+}
+
 func TestFileRequestLogger_LogRequestWithSourcesWritesLocalLogAndCleansParts(t *testing.T) {
 	logsDir := t.TempDir()
 	logger := NewFileRequestLogger(true, logsDir, "", 0)

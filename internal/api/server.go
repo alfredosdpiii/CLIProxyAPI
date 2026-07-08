@@ -82,7 +82,7 @@ func defaultRequestLoggerFactory(cfg *config.Config, configPath string) logging.
 	configDir := filepath.Dir(configPath)
 	logsDir := logging.ResolveLogDirectory(cfg)
 	logger := logging.NewFileRequestLogger(cfg.RequestLog, logsDir, configDir, cfg.ErrorLogsMaxFiles)
-	logger.SetHomeEnabled(cfg != nil && cfg.Home.Enabled)
+	logger.SetHomeEnabled(true)
 	return logging.NewAsyncRequestLogger(logger, logging.DefaultRequestLogQueueSize)
 }
 
@@ -1554,6 +1554,10 @@ func (s *Server) applyAccessConfig(oldCfg, newCfg *config.Config) {
 //   - clients: The new slice of AI service clients
 //   - cfg: The new application configuration
 func (s *Server) UpdateClients(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+
 	// Reconstruct old config from YAML snapshot to avoid reference sharing issues
 	var oldCfg *config.Config
 	if len(s.oldConfigYaml) > 0 {
@@ -1575,7 +1579,7 @@ func (s *Server) UpdateClients(cfg *config.Config) {
 
 	if oldCfg == nil || oldCfg.Home.Enabled != cfg.Home.Enabled {
 		if setter, ok := s.requestLogger.(interface{ SetHomeEnabled(bool) }); ok {
-			setter.SetHomeEnabled(cfg.Home.Enabled)
+			setter.SetHomeEnabled(true)
 		}
 	}
 

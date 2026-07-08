@@ -52,7 +52,13 @@ func newTestServerWithOptions(t *testing.T, opts ...ServerOption) *Server {
 	accessManager := sdkaccess.NewManager()
 
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	return NewServer(cfg, authManager, accessManager, configPath, opts...)
+	server := NewServer(cfg, authManager, accessManager, configPath, opts...)
+	t.Cleanup(func() {
+		if closer, ok := server.requestLogger.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	})
+	return server
 }
 
 func TestHealthz(t *testing.T) {

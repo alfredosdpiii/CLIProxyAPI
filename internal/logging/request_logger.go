@@ -505,6 +505,14 @@ func (l *FileRequestLogger) SetHomeEnabled(enabled bool) {
 	l.homeEnabled = enabled
 }
 
+func (l *FileRequestLogger) shouldForwardHome() bool {
+	if l == nil || !l.homeEnabled {
+		return false
+	}
+	client := currentHomeRequestLogClient()
+	return client != nil && client.HeartbeatOK()
+}
+
 // IsEnabled returns whether request logging is currently enabled.
 //
 // Returns:
@@ -587,7 +595,7 @@ func (l *FileRequestLogger) logRequestWithSources(url, method string, requestHea
 		return nil
 	}
 
-	if l.homeEnabled && l.enabled {
+	if l.shouldForwardHome() && l.enabled {
 		responseToWrite, decompressErr := l.decompressResponse(responseHeaders, response)
 		if decompressErr != nil {
 			responseToWrite = response
@@ -717,11 +725,7 @@ func (l *FileRequestLogger) LogStreamingRequest(url, method string, headers map[
 		return &NoOpStreamingLogWriter{}, nil
 	}
 
-	if l.homeEnabled {
-		client := currentHomeRequestLogClient()
-		if client == nil || !client.HeartbeatOK() {
-			return &NoOpStreamingLogWriter{}, nil
-		}
+	if l.shouldForwardHome() {
 		return newHomeStreamingLogWriter(url, method, headers, body, requestID), nil
 	}
 
