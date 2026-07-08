@@ -1692,6 +1692,9 @@ type FileStreamingLogWriter struct {
 	// apiWebsocketTimeline stores the upstream websocket event timeline.
 	apiWebsocketTimeline []byte
 
+	// apiWebsocketTimelineSource stores file-backed upstream websocket timeline data.
+	apiWebsocketTimelineSource *FileBodySource
+
 	// apiResponseTimestamp captures when the API response was received.
 	apiResponseTimestamp time.Time
 }
@@ -1806,6 +1809,15 @@ func (w *FileStreamingLogWriter) WriteAPIWebsocketTimeline(apiWebsocketTimeline 
 	return nil
 }
 
+// WriteAPIWebsocketTimelineSource buffers a file-backed upstream websocket timeline for final writing.
+func (w *FileStreamingLogWriter) WriteAPIWebsocketTimelineSource(apiWebsocketTimelineSource *FileBodySource) error {
+	if apiWebsocketTimelineSource == nil || !apiWebsocketTimelineSource.HasPayload() {
+		return nil
+	}
+	w.apiWebsocketTimelineSource = apiWebsocketTimelineSource
+	return nil
+}
+
 func (w *FileStreamingLogWriter) SetFirstChunkTimestamp(timestamp time.Time) {
 	if !timestamp.IsZero() {
 		w.apiResponseTimestamp = timestamp
@@ -1832,18 +1844,21 @@ func (w *FileStreamingLogWriter) Close() error {
 	select {
 	case errWrite := <-w.errorChan:
 		w.cleanupTempFiles()
+		cleanupFileBodySources(w.apiRequestSource, w.apiResponseSource, w.apiWebsocketTimelineSource)
 		return errWrite
 	default:
 	}
 
 	if w.logFilePath == "" {
 		w.cleanupTempFiles()
+		cleanupFileBodySources(w.apiRequestSource, w.apiResponseSource, w.apiWebsocketTimelineSource)
 		return nil
 	}
 
 	logFile, errOpen := os.OpenFile(w.logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if errOpen != nil {
 		w.cleanupTempFiles()
+		cleanupFileBodySources(w.apiRequestSource, w.apiResponseSource, w.apiWebsocketTimelineSource)
 		return fmt.Errorf("failed to create log file: %w", errOpen)
 	}
 
@@ -1856,6 +1871,7 @@ func (w *FileStreamingLogWriter) Close() error {
 	}
 
 	w.cleanupTempFiles()
+	cleanupFileBodySources(w.apiRequestSource, w.apiResponseSource, w.apiWebsocketTimelineSource)
 	return writeErr
 }
 
@@ -1896,10 +1912,10 @@ func (w *FileStreamingLogWriter) asyncWriter() {
 }
 
 func (w *FileStreamingLogWriter) writeFinalLog(logFile *os.File) error {
-	if errWrite := writeRequestInfoWithBody(logFile, w.url, w.method, w.requestHeaders, nil, w.requestBodyPath, w.timestamp, "http", inferUpstreamTransport(w.apiRequest, w.apiRequestSource, w.apiResponse, w.apiResponseSource, w.apiWebsocketTimeline, nil, nil), true); errWrite != nil {
+	if errWrite := writeRequestInfoWithBody(logFile, w.url, w.method, w.requestHeaders, nil, w.requestBodyPath, w.timestamp, "http", inferUpstreamTransport(w.apiRequest, w.apiRequestSource, w.apiResponse, w.apiResponseSource, w.apiWebsocketTimeline, w.apiWebsocketTimelineSource, nil), true); errWrite != nil {
 		return errWrite
 	}
-	if errWrite := writeAPISection(logFile, "=== API WEBSOCKET TIMELINE ===\n", "=== API WEBSOCKET TIMELINE", w.apiWebsocketTimeline, time.Time{}); errWrite != nil {
+	if errWrite := writeAPISectionWithSource(logFile, "=== API WEBSOCKET TIMELINE ===\n", "=== API WEBSOCKET TIMELINE", w.apiWebsocketTimeline, w.apiWebsocketTimelineSource, time.Time{}); errWrite != nil {
 		return errWrite
 	}
 	if errWrite := writePreformattedAPISectionWithSource(logFile, "=== API REQUEST ===\n", "=== API REQUEST", w.apiRequest, w.apiRequestSource, time.Time{}); errWrite != nil {

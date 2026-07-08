@@ -536,12 +536,15 @@ func TestDefaultRequestLoggerFactory_UsesResolvedLogDirectory(t *testing.T) {
 	}
 
 	logger := defaultRequestLoggerFactory(cfg, configPath)
-	fileLogger, ok := logger.(*internallogging.FileRequestLogger)
+	asyncLogger, ok := logger.(*internallogging.AsyncRequestLogger)
 	if !ok {
-		t.Fatalf("expected *FileRequestLogger, got %T", logger)
+		t.Fatalf("expected *AsyncRequestLogger, got %T", logger)
 	}
+	t.Cleanup(func() {
+		_ = asyncLogger.Close()
+	})
 
-	errLog := fileLogger.LogRequestWithOptions(
+	errLog := asyncLogger.LogRequestWithOptions(
 		"/v1/chat/completions",
 		http.MethodPost,
 		map[string][]string{"Content-Type": []string{"application/json"}},
@@ -561,6 +564,9 @@ func TestDefaultRequestLoggerFactory_UsesResolvedLogDirectory(t *testing.T) {
 	)
 	if errLog != nil {
 		t.Fatalf("failed to write forced error request log: %v", errLog)
+	}
+	if errClose := asyncLogger.Close(); errClose != nil {
+		t.Fatalf("failed to drain async request logger: %v", errClose)
 	}
 
 	authLogsDir := filepath.Join(authDir, "logs")

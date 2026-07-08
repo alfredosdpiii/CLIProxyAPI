@@ -306,9 +306,12 @@ func (w *ResponseWriterWrapper) Finalize(c *gin.Context) error {
 		// Write API Request and Response to the streaming log before closing
 		apiRequest := w.extractAPIRequest(c)
 		apiResponse := w.extractAPIResponse(c)
+		apiWebsocketTimeline := w.extractAPIWebsocketTimeline(c)
+		retainsSources := false
 		if sourceWriter, ok := w.streamWriter.(interface {
 			WriteAPIRequestSource(*logging.FileBodySource) error
 			WriteAPIResponseSource(*logging.FileBodySource) error
+			WriteAPIWebsocketTimelineSource(*logging.FileBodySource) error
 		}); ok {
 			if len(apiRequest) > 0 {
 				_ = w.streamWriter.WriteAPIRequest(apiRequest)
@@ -322,6 +325,12 @@ func (w *ResponseWriterWrapper) Finalize(c *gin.Context) error {
 			if apiResponseSource != nil && apiResponseSource.HasPayload() {
 				_ = sourceWriter.WriteAPIResponseSource(apiResponseSource)
 			}
+			if len(apiWebsocketTimeline) > 0 {
+				_ = w.streamWriter.WriteAPIWebsocketTimeline(apiWebsocketTimeline)
+			}
+			if apiWebsocketTimelineSource != nil && apiWebsocketTimelineSource.HasPayload() {
+				_ = sourceWriter.WriteAPIWebsocketTimelineSource(apiWebsocketTimelineSource)
+			}
 		} else {
 			var errMerge error
 			apiRequest, errMerge = mergeFileBodySource(apiRequest, apiRequestSource)
@@ -334,30 +343,40 @@ func (w *ResponseWriterWrapper) Finalize(c *gin.Context) error {
 				cleanupFileBodySources(websocketTimelineSource, apiWebsocketTimelineSource)
 				return errMerge
 			}
+			apiWebsocketTimeline, errMerge = mergeFileBodySource(apiWebsocketTimeline, apiWebsocketTimelineSource)
+			if errMerge != nil {
+				cleanupFileBodySources(websocketTimelineSource, apiRequestSource, apiResponseSource)
+				return errMerge
+			}
 			if len(apiRequest) > 0 {
 				_ = w.streamWriter.WriteAPIRequest(apiRequest)
 			}
 			if len(apiResponse) > 0 {
 				_ = w.streamWriter.WriteAPIResponse(apiResponse)
 			}
+			if len(apiWebsocketTimeline) > 0 {
+				_ = w.streamWriter.WriteAPIWebsocketTimeline(apiWebsocketTimeline)
+			}
 		}
-		apiWebsocketTimeline := w.extractAPIWebsocketTimeline(c)
-		var errMerge error
-		apiWebsocketTimeline, errMerge = mergeFileBodySource(apiWebsocketTimeline, apiWebsocketTimelineSource)
-		if errMerge != nil {
-			cleanupFileBodySources(websocketTimelineSource, apiRequestSource, apiResponseSource)
-			return errMerge
-		}
-		if len(apiWebsocketTimeline) > 0 {
-			_ = w.streamWriter.WriteAPIWebsocketTimeline(apiWebsocketTimeline)
+		if retainer, ok := w.streamWriter.(interface{ RetainsLogSources() bool }); ok {
+			retainsSources = retainer.RetainsLogSources()
 		}
 		if err := w.streamWriter.Close(); err != nil {
 			w.streamWriter = nil
-			cleanupFileBodySources(websocketTimelineSource, apiRequestSource, apiResponseSource)
+			if !retainsSources {
+				cleanupFileBodySources(websocketTimelineSource, apiRequestSource, apiResponseSource, apiWebsocketTimelineSource)
+			} else {
+				cleanupFileBodySources(websocketTimelineSource)
+			}
 			return err
 		}
 		w.streamWriter = nil
-		cleanupFileBodySources(websocketTimelineSource, apiRequestSource, apiResponseSource)
+		if !retainsSources {
+			cleanupFileBodySources(websocketTimelineSource, apiRequestSource, apiResponseSource, apiWebsocketTimelineSource)
+		} else {
+			// Streaming writer owns transferred sources for the async close job.
+			cleanupFileBodySources(websocketTimelineSource)
+		}
 		return nil
 	}
 

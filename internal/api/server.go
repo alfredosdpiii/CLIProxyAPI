@@ -83,7 +83,7 @@ func defaultRequestLoggerFactory(cfg *config.Config, configPath string) logging.
 	logsDir := logging.ResolveLogDirectory(cfg)
 	logger := logging.NewFileRequestLogger(cfg.RequestLog, logsDir, configDir, cfg.ErrorLogsMaxFiles)
 	logger.SetHomeEnabled(cfg != nil && cfg.Home.Enabled)
-	return logger
+	return logging.NewAsyncRequestLogger(logger, logging.DefaultRequestLogQueueSize)
 }
 
 func effectiveSDKConfig(cfg *config.Config) *config.SDKConfig {
@@ -1505,6 +1505,12 @@ func (s *Server) Stop(ctx context.Context) error {
 	// Shutdown the HTTP server.
 	if err := s.server.Shutdown(ctx); err != nil {
 		return fmt.Errorf("failed to shutdown HTTP server: %v", err)
+	}
+
+	if closer, ok := s.requestLogger.(interface{ Close() error }); ok {
+		if errClose := closer.Close(); errClose != nil {
+			log.WithError(errClose).Warn("failed to close request logger")
+		}
 	}
 
 	log.Debug("API server stopped")
