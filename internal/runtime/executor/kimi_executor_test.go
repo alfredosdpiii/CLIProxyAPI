@@ -6,6 +6,12 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func TestStripKimiPrefixMapsK3ToUpstreamID(t *testing.T) {
+	if got := stripKimiPrefix("kimi-k3"); got != "k3" {
+		t.Fatalf("stripKimiPrefix(kimi-k3) = %q, want %q", got, "k3")
+	}
+}
+
 func TestNormalizeKimiToolMessageLinks_UsesCallIDFallback(t *testing.T) {
 	body := []byte(`{
 		"messages":[

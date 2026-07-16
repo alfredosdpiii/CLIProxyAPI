@@ -51,6 +51,26 @@ func TestApply_ModeLevel_UsesReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestApply_K3UsesMaxReasoningEffort(t *testing.T) {
+	applier := NewApplier()
+	modelInfo := &registry.ModelInfo{
+		ID:       "kimi-k3",
+		Thinking: &registry.ThinkingSupport{Levels: []string{"max"}},
+	}
+	body := []byte(`{"model":"kimi-k3","thinking":{"type":"disabled"}}`)
+
+	out, errApply := applier.Apply(body, thinking.ThinkingConfig{Mode: thinking.ModeLevel, Level: thinking.LevelMax}, modelInfo)
+	if errApply != nil {
+		t.Fatalf("Apply() error = %v", errApply)
+	}
+	if got := gjson.GetBytes(out, "reasoning_effort").String(); got != "max" {
+		t.Fatalf("reasoning_effort = %q, want %q, body=%s", got, "max", string(out))
+	}
+	if gjson.GetBytes(out, "thinking").Exists() {
+		t.Fatalf("thinking should be removed for K3, body=%s", string(out))
+	}
+}
+
 func TestApply_UserDefinedModeNone_UsesDisabledThinking(t *testing.T) {
 	applier := NewApplier()
 	modelInfo := &registry.ModelInfo{

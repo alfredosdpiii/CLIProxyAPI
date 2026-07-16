@@ -17,6 +17,25 @@ func TestWithXAIBuiltinsIncludesVideoPreviewModel(t *testing.T) {
 	t.Fatalf("expected xAI builtin model %s", xaiBuiltinVideo15PreviewModelID)
 }
 
+func TestGetKimiModelsIncludesK3(t *testing.T) {
+	for _, model := range GetKimiModels() {
+		if model == nil || model.ID != "kimi-k3" {
+			continue
+		}
+		if model.ContextLength != 1048576 {
+			t.Fatalf("kimi-k3 context length = %d, want 1048576", model.ContextLength)
+		}
+		if model.MaxCompletionTokens != 1048576 {
+			t.Fatalf("kimi-k3 max completion tokens = %d, want 1048576", model.MaxCompletionTokens)
+		}
+		if model.Thinking == nil || len(model.Thinking.Levels) != 1 || model.Thinking.Levels[0] != "max" {
+			t.Fatalf("kimi-k3 thinking levels = %+v, want [max]", model.Thinking)
+		}
+		return
+	}
+	t.Fatal("expected Kimi model kimi-k3")
+}
+
 func TestAntigravityWebSearchModelForRequiresRequestedModelCapability(t *testing.T) {
 	registryRef := GetGlobalRegistry()
 	registryRef.RegisterClient("test-antigravity-websearch-route", "antigravity", []*ModelInfo{
